@@ -17,7 +17,6 @@ ADMIN_IDS = [int(x.strip()) for x in _admin_env.split(",") if x.strip().isdigit(
 if not BOT_TOKEN:
     raise ValueError("BOT_TOKEN environment variable o'rnatilmagan!")
 
-# --- Logging ---
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO
@@ -29,8 +28,16 @@ USERS_FILE = "users.json"
 
 # Ro'yxatdan o'tish holatlari
 REG_NAME, REG_SURNAME, REG_CLASS, REG_AGE = range(4)
+
 # Vazifa qo'shish holatlari
-TASK_TEXT, TASK_TIME = range(4, 6)
+TASK_SUBJECT, TASK_CLASS, TASK_DESC, TASK_DEADLINE = range(4, 8)
+
+SUBJECTS = [
+    "📐 Matematika", "📖 Ona tili", "🌍 Ingliz tili",
+    "🔬 Fizika", "⚗️ Kimyo", "🧬 Biologiya",
+    "🗺️ Geografiya", "📜 Tarix", "💻 Informatika",
+    "🎨 Chizmachilik", "⚽ Jismoniy tarbiya", "🎵 Musiqa"
+]
 
 
 # --- Ma'lumotlar ---
@@ -71,8 +78,9 @@ def is_registered(user_id: int) -> bool:
 def get_main_keyboard(user_id: int):
     if is_admin(user_id):
         keyboard = [
-            ["➕ Vazifa qo'shish", "📋 Vazifalarim"],
-            ["🗑 Vazifa o'chirish", "ℹ️ Yordam"]
+            ["➕ Vazifa berish", "📋 Vazifalar"],
+            ["🗑 Vazifa o'chirish", "👥 O'quvchilar"],
+            ["📢 Xabar yuborish", "ℹ️ Yordam"]
         ]
     else:
         keyboard = [
@@ -86,20 +94,23 @@ def get_main_keyboard(user_id: int):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
 
-    if is_registered(user_id):
+    if is_registered(user_id) or is_admin(user_id):
         users = load_users()
-        user = users[str(user_id)]
+        user = users.get(str(user_id), {})
+        name = user.get("name", "Admin") if user else "Admin"
+        surname = user.get("surname", "") if user else ""
         await update.message.reply_text(
-            f"👋 Xush kelibsiz, *{user['name']} {user['surname']}*!\n\n"
-            f"🏫 Stanford School maktabi vazifa eslatuvchi botiga xush kelibsiz!",
+            f"👋 Xush kelibsiz, *{name} {surname}*!\n\n"
+            f"🏫 *Stanford School* vazifa botiga xush kelibsiz!",
             parse_mode="Markdown",
             reply_markup=get_main_keyboard(user_id)
         )
-        return
+        return ConversationHandler.END
 
     await update.message.reply_text(
-        "🏫 *Stanford School* maktabining vazifa eslatuvchi botiga xush kelibsiz!\n\n"
-        "Davom etish uchun ro'yxatdan o'tishingiz kerak.\n\n"
+        "🏫 *Stanford School* maktabining\n"
+        "vazifa eslatuvchi botiga xush kelibsiz!\n\n"
+        "Davom etish uchun ro'yxatdan o'ting.\n\n"
         "👤 *Ismingizni* kiriting:",
         parse_mode="Markdown",
         reply_markup=ReplyKeyboardRemove()
@@ -113,7 +124,10 @@ async def reg_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Ism juda qisqa! Qayta kiriting:")
         return REG_NAME
     context.user_data["reg_name"] = name
-    await update.message.reply_text(f"✅ Ism: *{name}*\n\n👤 *Familiyangizni* kiriting:", parse_mode="Markdown")
+    await update.message.reply_text(
+        f"✅ Ism: *{name}*\n\n👤 *Familiyangizni* kiriting:",
+        parse_mode="Markdown"
+    )
     return REG_SURNAME
 
 
@@ -124,8 +138,9 @@ async def reg_surname(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return REG_SURNAME
     context.user_data["reg_surname"] = surname
     await update.message.reply_text(
-        f"✅ Familiya: *{surname}*\n\n🏫 *Sinfingizni* kiriting:\n"
-        "Misol: `5A`, `9B`, `11V`",
+        f"✅ Familiya: *{surname}*\n\n"
+        f"🏫 *Sinfingizni* kiriting:\n"
+        f"Misol: `5A`, `9B`, `11V`",
         parse_mode="Markdown"
     )
     return REG_CLASS
@@ -134,7 +149,7 @@ async def reg_surname(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def reg_class(update: Update, context: ContextTypes.DEFAULT_TYPE):
     school_class = update.message.text.strip().upper()
     if len(school_class) < 2:
-        await update.message.reply_text("❌ Sinf noto'g'ri! Qayta kiriting (misol: 5A):")
+        await update.message.reply_text("❌ Sinf noto'g'ri! Misol: `5A`", parse_mode="Markdown")
         return REG_CLASS
     context.user_data["reg_class"] = school_class
     await update.message.reply_text(
@@ -147,7 +162,7 @@ async def reg_class(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def reg_age(update: Update, context: ContextTypes.DEFAULT_TYPE):
     age_text = update.message.text.strip()
     if not age_text.isdigit() or not (5 <= int(age_text) <= 20):
-        await update.message.reply_text("❌ Yosh 5 dan 20 gacha bo'lishi kerak! Qayta kiriting:")
+        await update.message.reply_text("❌ Yosh 5 dan 20 gacha bo'lishi kerak!")
         return REG_AGE
 
     user_id = str(update.effective_user.id)
@@ -164,7 +179,7 @@ async def reg_age(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(
         f"🎉 *Ro'yxatdan o'tish muvaffaqiyatli!*\n\n"
-        f"👤 Ism: {users[user_id]['name']} {users[user_id]['surname']}\n"
+        f"👤 {users[user_id]['name']} {users[user_id]['surname']}\n"
         f"🏫 Sinf: {users[user_id]['class']}\n"
         f"🎂 Yosh: {users[user_id]['age']}\n\n"
         f"🏫 Stanford School botiga xush kelibsiz!",
@@ -174,39 +189,223 @@ async def reg_age(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 
-# --- Yordam ---
+# --- Vazifa qo'shish (Admin) ---
 
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def add_task_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update.effective_user.id):
+        await update.message.reply_text("⛔ Vazifa faqat admin tomonidan beriladi!")
+        return ConversationHandler.END
+
+    # Fan tanlash klaviaturasi
+    keyboard = [[s] for s in SUBJECTS]
+    keyboard.append(["❌ Bekor qilish"])
     await update.message.reply_text(
-        "📌 *Buyruqlar:*\n\n"
-        "📋 *Vazifalarim* — barcha vazifalarni ko'rish\n"
-        "ℹ️ *Yordam* — ushbu yordam xabari\n\n"
-        "⏰ Vaqt formati: `HH:MM` (masalan `09:30`)\n"
-        "📅 Kun formati: `kunlik` yoki `DD.MM.YYYY`\n\n"
-        "🏫 *Stanford School*",
+        "📚 *Qaysi fandan vazifa?*\n\nFanni tanlang:",
+        parse_mode="Markdown",
+        reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+    )
+    return TASK_SUBJECT
+
+
+async def add_task_subject(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    subject = update.message.text.strip()
+    if subject == "❌ Bekor qilish":
+        await update.message.reply_text("❌ Bekor qilindi.", reply_markup=get_main_keyboard(update.effective_user.id))
+        return ConversationHandler.END
+
+    context.user_data["task_subject"] = subject
+
+    # Sinf tanlash
+    keyboard = [
+        ["1A", "1B", "2A", "2B"],
+        ["3A", "3B", "4A", "4B"],
+        ["5A", "5B", "6A", "6B"],
+        ["7A", "7B", "8A", "8B"],
+        ["9A", "9B", "10A", "10B"],
+        ["11A", "11B", "🏫 Barcha sinflar"],
+        ["❌ Bekor qilish"]
+    ]
+    await update.message.reply_text(
+        f"✅ Fan: *{subject}*\n\n🏫 *Qaysi sinf uchun?*",
+        parse_mode="Markdown",
+        reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+    )
+    return TASK_CLASS
+
+
+async def add_task_class(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    target_class = update.message.text.strip()
+    if target_class == "❌ Bekor qilish":
+        await update.message.reply_text("❌ Bekor qilindi.", reply_markup=get_main_keyboard(update.effective_user.id))
+        return ConversationHandler.END
+
+    context.user_data["task_class"] = target_class
+    await update.message.reply_text(
+        f"✅ Sinf: *{target_class}*\n\n"
+        f"📝 *Vazifa mazmunini* yozing:\n\n"
+        f"Misol: Sahifa 45-50 mashqlarini bajaring",
+        parse_mode="Markdown",
+        reply_markup=ReplyKeyboardRemove()
+    )
+    return TASK_DESC
+
+
+async def add_task_desc(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["task_desc"] = update.message.text.strip()
+    await update.message.reply_text(
+        f"✅ Vazifa yozildi.\n\n"
+        f"📅 *Topshirish muddatini* kiriting:\n\n"
+        f"Format: `DD.MM.YYYY` yoki `ertaga` yoki `bugun`\n"
+        f"Misol: `25.11.2026`",
         parse_mode="Markdown"
     )
+    return TASK_DEADLINE
 
 
-async def myid(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    users = load_users()
-    info = users.get(str(user.id), {})
-    text = (
-        f"👤 *Ma'lumotlaringiz:*\n\n"
-        f"🆔 ID: `{user.id}`\n"
-        f"👤 Ism: {user.first_name}\n"
+async def add_task_deadline(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    deadline_text = update.message.text.strip().lower()
+    user_id = str(update.effective_user.id)
+
+    today = datetime.now()
+    if deadline_text == "bugun":
+        deadline = today.strftime("%d.%m.%Y")
+    elif deadline_text == "ertaga":
+        from datetime import timedelta
+        deadline = (today + timedelta(days=1)).strftime("%d.%m.%Y")
+    else:
+        try:
+            day, month, year = map(int, deadline_text.split("."))
+            deadline = f"{day:02d}.{month:02d}.{year}"
+        except Exception:
+            await update.message.reply_text(
+                "❌ Noto'g'ri format! Misol: `25.11.2026`",
+                parse_mode="Markdown"
+            )
+            return TASK_DEADLINE
+
+    subject = context.user_data["task_subject"]
+    target_class = context.user_data["task_class"]
+    desc = context.user_data["task_desc"]
+
+    reminders = load_reminders()
+    if "tasks" not in reminders:
+        reminders["tasks"] = []
+
+    task_id = str(len(reminders["tasks"]) + 1)
+    task = {
+        "id": task_id,
+        "subject": subject,
+        "class": target_class,
+        "desc": desc,
+        "deadline": deadline,
+        "created": today.strftime("%d.%m.%Y %H:%M"),
+        "created_by": user_id
+    }
+    reminders["tasks"].append(task)
+    save_reminders(reminders)
+
+    # O'quvchilarga xabar yuborish
+    await notify_students(context.application, task)
+
+    await update.message.reply_text(
+        f"✅ *Vazifa muvaffaqiyatli berildi!*\n\n"
+        f"📚 Fan: {subject}\n"
+        f"🏫 Sinf: {target_class}\n"
+        f"📝 Vazifa: {desc}\n"
+        f"📅 Muddat: {deadline}",
+        parse_mode="Markdown",
+        reply_markup=get_main_keyboard(int(user_id))
     )
-    if info:
+    return ConversationHandler.END
+
+
+async def notify_students(app, task):
+    """Vazifa berilganda tegishli o'quvchilarga xabar yuborish"""
+    users = load_users()
+    for uid, user in users.items():
+        if task["class"] == "🏫 Barcha sinflar" or user["class"] == task["class"]:
+            try:
+                await app.bot.send_message(
+                    chat_id=int(uid),
+                    text=f"📚 *Yangi uy vazifasi!*\n\n"
+                         f"📖 Fan: {task['subject']}\n"
+                         f"🏫 Sinf: {task['class']}\n"
+                         f"📝 Vazifa: {task['desc']}\n"
+                         f"📅 Muddat: {task['deadline']}\n\n"
+                         f"🏫 Stanford School",
+                    parse_mode="Markdown"
+                )
+            except Exception as e:
+                logger.error(f"Xabar yuborishda xato {uid}: {e}")
+
+
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "❌ Bekor qilindi.",
+        reply_markup=get_main_keyboard(update.effective_user.id)
+    )
+    return ConversationHandler.END
+
+
+# --- Vazifalarni ko'rish ---
+
+async def list_tasks(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    reminders = load_reminders()
+    tasks = reminders.get("tasks", [])
+
+    if is_admin(user_id):
+        # Admin barcha vazifalarni ko'radi
+        my_tasks = tasks
+        title = "📋 *Barcha vazifalar:*"
+    else:
+        # O'quvchi faqat o'z sinfi vazifalarini ko'radi
+        users = load_users()
+        user = users.get(str(user_id), {})
+        user_class = user.get("class", "")
+        my_tasks = [t for t in tasks if t["class"] == user_class or t["class"] == "🏫 Barcha sinflar"]
+        title = f"📋 *{user_class} sinfi vazifalari:*"
+
+    if not my_tasks:
+        await update.message.reply_text("📭 Hozircha vazifalar yo'q.")
+        return
+
+    text = title + "\n\n"
+    for task in my_tasks:
         text += (
-            f"📛 To'liq ism: {info['name']} {info['surname']}\n"
-            f"🏫 Sinf: {info['class']}\n"
-            f"🎂 Yosh: {info['age']}\n"
+            f"📚 *{task['subject']}*\n"
+            f"🏫 Sinf: {task['class']}\n"
+            f"📝 {task['desc']}\n"
+            f"📅 Muddat: {task['deadline']}\n"
+            f"{'─' * 20}\n"
         )
+
     await update.message.reply_text(text, parse_mode="Markdown")
 
 
-# --- Admin buyruqlar ---
+# --- Vazifa o'chirish ---
+
+async def delete_task_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update.effective_user.id):
+        await update.message.reply_text("⛔ Faqat admin o'chira oladi!")
+        return
+
+    reminders = load_reminders()
+    tasks = reminders.get("tasks", [])
+
+    if not tasks:
+        await update.message.reply_text("📭 O'chiriladigan vazifalar yo'q.")
+        return
+
+    text = "🗑 *Qaysi vazifani o'chirish?*\n\nRaqamini yozing:\n\n"
+    for task in tasks:
+        text += f"*{task['id']}.* {task['subject']} | {task['class']} | {task['deadline']}\n"
+
+    await update.message.reply_text(text, parse_mode="Markdown")
+    context.user_data["deleting"] = True
+
+
+# --- Admin: o'quvchilar ro'yxati ---
 
 async def admin_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user.id):
@@ -215,15 +414,17 @@ async def admin_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     users = load_users()
     if not users:
-        await update.message.reply_text("📭 Hech qanday foydalanuvchi yo'q.")
+        await update.message.reply_text("📭 Hech qanday o'quvchi yo'q.")
         return
 
     text = f"👥 *Ro'yxatdan o'tgan o'quvchilar: {len(users)} ta*\n\n"
     for uid, u in users.items():
-        text += f"👤 {u['name']} {u['surname']} | {u['class']} sinf | {u['age']} yosh\n"
+        text += f"👤 {u['name']} {u['surname']} | {u['class']} | {u['age']} yosh\n"
 
     await update.message.reply_text(text, parse_mode="Markdown")
 
+
+# --- Admin: broadcast ---
 
 async def admin_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user.id):
@@ -257,142 +458,28 @@ async def admin_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-# --- Vazifa qo'shish (faqat admin) ---
-
-async def add_task_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_admin(update.effective_user.id):
-        await update.message.reply_text("⛔ Vazifa faqat admin tomonidan qo'shiladi!")
-        return ConversationHandler.END
-    await update.message.reply_text(
-        "📝 Vazifa matnini yozing:\n\n"
-        "(Bekor qilish uchun /cancel)"
-    )
-    return TASK_TEXT
-
-
-async def add_task_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["task_text"] = update.message.text
-    await update.message.reply_text(
-        "⏰ Eslatish vaqtini kiriting:\n\n"
-        "Format: `HH:MM` yoki `HH:MM DD.MM.YYYY`\n"
-        "Misol: `09:00` (har kuni) yoki `14:30 25.11.2026`",
-        parse_mode="Markdown"
-    )
-    return TASK_TIME
-
-
-async def add_task_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    time_text = update.message.text.strip()
-    user_id = str(update.effective_user.id)
-
-    try:
-        parts = time_text.split()
-        time_part = parts[0]
-        hour, minute = map(int, time_part.split(":"))
-
-        if len(parts) == 2:
-            date_part = parts[1]
-            day, month, year = map(int, date_part.split("."))
-            run_date = datetime(year, month, day, hour, minute)
-            schedule_type = "once"
-            display_time = f"{time_part} {date_part}"
-        else:
-            run_date = None
-            schedule_type = "daily"
-            display_time = f"Har kuni {time_part}"
-
-    except Exception:
-        await update.message.reply_text(
-            "❌ Noto'g'ri format! Qayta kiriting:\n"
-            "`09:00` yoki `14:30 25.11.2026`",
-            parse_mode="Markdown"
+async def myid(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    users = load_users()
+    info = users.get(str(user.id), {})
+    text = f"🆔 ID: `{user.id}`\n"
+    if info:
+        text += (
+            f"👤 {info['name']} {info['surname']}\n"
+            f"🏫 Sinf: {info['class']}\n"
+            f"🎂 Yosh: {info['age']}\n"
         )
-        return TASK_TIME
+    await update.message.reply_text(text, parse_mode="Markdown")
 
-    reminders = load_reminders()
-    if user_id not in reminders:
-        reminders[user_id] = []
 
-    task_id = str(len(reminders[user_id]) + 1)
-    task = {
-        "id": task_id,
-        "text": context.user_data["task_text"],
-        "time": time_part,
-        "type": schedule_type,
-        "display_time": display_time,
-        "created": datetime.now().strftime("%d.%m.%Y %H:%M")
-    }
-    if run_date:
-        task["date"] = run_date.strftime("%d.%m.%Y")
-
-    reminders[user_id].append(task)
-    save_reminders(reminders)
-
-    scheduler = context.application.scheduler
-    schedule_reminder(scheduler, context.application, user_id, task)
-
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        f"✅ Vazifa qo'shildi!\n\n"
-        f"📌 *{task['text']}*\n"
-        f"⏰ {display_time}",
+        "📌 *Stanford School vazifa boti*\n\n"
+        "📋 *Vazifalarim* — o'z sinfi vazifalarini ko'rish\n"
+        "ℹ️ *Yordam* — yordam\n\n"
+        "🏫 Stanford School",
         parse_mode="Markdown"
     )
-    return ConversationHandler.END
-
-
-async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("❌ Bekor qilindi.")
-    return ConversationHandler.END
-
-
-# --- Vazifalarni ko'rish ---
-
-async def list_tasks(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = str(update.effective_user.id)
-    reminders = load_reminders()
-
-    # Admin o'z vazifalarini ko'radi, oddiy foydalanuvchi admin vazifalarini ko'radi
-    if is_admin(int(user_id)):
-        tasks = reminders.get(user_id, [])
-    else:
-        # Barcha admin vazifalarini ko'rsat
-        tasks = []
-        for admin_id in ADMIN_IDS:
-            tasks += reminders.get(str(admin_id), [])
-
-    if not tasks:
-        await update.message.reply_text("📭 Hozircha vazifalar yo'q.")
-        return
-
-    text = "📋 *Vazifalar:*\n\n"
-    for task in tasks:
-        text += f"🔹 *{task['id']}.* {task['text']}\n"
-        text += f"   ⏰ {task['display_time']}\n\n"
-
-    await update.message.reply_text(text, parse_mode="Markdown")
-
-
-# --- Vazifa o'chirish ---
-
-async def delete_task_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_admin(update.effective_user.id):
-        await update.message.reply_text("⛔ Vazifa faqat admin tomonidan o'chiriladi!")
-        return
-
-    user_id = str(update.effective_user.id)
-    reminders = load_reminders()
-    tasks = reminders.get(user_id, [])
-
-    if not tasks:
-        await update.message.reply_text("📭 O'chiriladigan vazifalar yo'q.")
-        return
-
-    text = "🗑 *Qaysi vazifani o'chirish?*\n\nRaqamini yozing:\n\n"
-    for task in tasks:
-        text += f"*{task['id']}.* {task['text']} — {task['display_time']}\n"
-
-    await update.message.reply_text(text, parse_mode="Markdown")
-    context.user_data["deleting"] = True
 
 
 # --- Xabarlar ---
@@ -401,7 +488,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     text = update.message.text
 
-    # Ro'yxatdan o'tmagan bo'lsa
     if not is_registered(user_id) and not is_admin(user_id):
         await update.message.reply_text(
             "⚠️ Avval ro'yxatdan o'ting!\n/start buyrug'ini bosing."
@@ -410,82 +496,42 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if context.user_data.get("deleting"):
         context.user_data["deleting"] = False
-        uid = str(user_id)
         reminders = load_reminders()
-        tasks = reminders.get(uid, [])
-
+        tasks = reminders.get("tasks", [])
         new_tasks = [t for t in tasks if t["id"] != text.strip()]
         if len(new_tasks) == len(tasks):
             await update.message.reply_text("❌ Bunday raqamli vazifa topilmadi.")
         else:
             for i, t in enumerate(new_tasks, 1):
                 t["id"] = str(i)
-            reminders[uid] = new_tasks
+            reminders["tasks"] = new_tasks
             save_reminders(reminders)
             await update.message.reply_text("✅ Vazifa o'chirildi!")
         return
 
-    if text == "➕ Vazifa qo'shish":
+    if text in ["➕ Vazifa berish"]:
         await add_task_start(update, context)
-    elif text == "📋 Vazifalarim":
+    elif text in ["📋 Vazifalar", "📋 Vazifalarim"]:
         await list_tasks(update, context)
     elif text == "🗑 Vazifa o'chirish":
         await delete_task_start(update, context)
+    elif text == "👥 O'quvchilar":
+        await admin_users(update, context)
+    elif text == "📢 Xabar yuborish":
+        await update.message.reply_text(
+            "📢 Foydalanish: `/broadcast matn`",
+            parse_mode="Markdown"
+        )
     elif text == "ℹ️ Yordam":
         await help_command(update, context)
 
 
-# --- Scheduler ---
-
-def schedule_reminder(scheduler, app, user_id, task):
-    job_id = f"{user_id}_{task['id']}"
-    hour, minute = map(int, task["time"].split(":"))
-
-    async def send_reminder():
-        # Barcha ro'yxatdan o'tgan foydalanuvchilarga yuborish
-        users = load_users()
-        for uid in users:
-            try:
-                await app.bot.send_message(
-                    chat_id=int(uid),
-                    text=f"🔔 *Stanford School eslatmasi!*\n\n📌 {task['text']}",
-                    parse_mode="Markdown"
-                )
-            except Exception as e:
-                logger.error(f"Xabar yuborishda xato {uid}: {e}")
-
-    if task["type"] == "daily":
-        scheduler.add_job(
-            send_reminder,
-            trigger="cron",
-            hour=hour,
-            minute=minute,
-            id=job_id,
-            replace_existing=True
-        )
-    elif task["type"] == "once" and task.get("date"):
-        day, month, year = map(int, task["date"].split("."))
-        run_date = datetime(year, month, day, hour, minute)
-        if run_date > datetime.now():
-            scheduler.add_job(
-                send_reminder,
-                trigger="date",
-                run_date=run_date,
-                id=job_id,
-                replace_existing=True
-            )
-
-
 async def on_startup(app):
-    reminders = load_reminders()
-    for user_id, tasks in reminders.items():
-        for task in tasks:
-            schedule_reminder(app.scheduler, app, user_id, task)
     users = load_users()
-    logger.info(f"{sum(len(t) for t in reminders.values())} ta vazifa, {len(users)} ta foydalanuvchi yuklandi")
+    reminders = load_reminders()
+    tasks = reminders.get("tasks", [])
+    logger.info(f"{len(tasks)} ta vazifa, {len(users)} ta o'quvchi yuklandi")
 
-
-# --- Asosiy ---
 
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
@@ -505,15 +551,17 @@ def main():
         fallbacks=[CommandHandler("cancel", cancel)]
     )
 
-    # Vazifa qo'shish
+    # Vazifa berish
     task_handler = ConversationHandler(
         entry_points=[
-            MessageHandler(filters.Regex("^➕ Vazifa qo'shish$"), add_task_start),
+            MessageHandler(filters.Regex("^➕ Vazifa berish$"), add_task_start),
             CommandHandler("add", add_task_start)
         ],
         states={
-            TASK_TEXT: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_task_text)],
-            TASK_TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_task_time)],
+            TASK_SUBJECT:  [MessageHandler(filters.TEXT & ~filters.COMMAND, add_task_subject)],
+            TASK_CLASS:    [MessageHandler(filters.TEXT & ~filters.COMMAND, add_task_class)],
+            TASK_DESC:     [MessageHandler(filters.TEXT & ~filters.COMMAND, add_task_desc)],
+            TASK_DEADLINE: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_task_deadline)],
         },
         fallbacks=[CommandHandler("cancel", cancel)]
     )
@@ -530,7 +578,7 @@ def main():
     app.post_init = on_startup
 
     scheduler.start()
-    logger.info("Bot ishga tushdi...")
+    logger.info("Stanford School boti ishga tushdi...")
     app.run_polling(drop_pending_updates=True)
 
 
