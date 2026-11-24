@@ -8,7 +8,14 @@ from telegram.ext import (
     ContextTypes, filters, ConversationHandler
 )
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from config import BOT_TOKEN, ADMIN_IDS
+import os
+
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
+_admin_env = os.environ.get("ADMIN_IDS", "")
+ADMIN_IDS = [int(x.strip()) for x in _admin_env.split(",") if x.strip().isdigit()]
+
+if not BOT_TOKEN:
+    raise ValueError("BOT_TOKEN environment variable o'rnatilmagan!")
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
