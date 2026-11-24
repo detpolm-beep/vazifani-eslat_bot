@@ -78,9 +78,10 @@ def is_registered(user_id: int) -> bool:
 def get_main_keyboard(user_id: int):
     if is_admin(user_id):
         keyboard = [
-            ["➕ Vazifa berish", "📋 Vazifalar"],
-            ["🗑 Vazifa o'chirish", "👥 O'quvchilar"],
-            ["📢 Xabar yuborish", "ℹ️ Yordam"]
+            ["📚 Vazifa berish", "📋 Vazifalar"],
+            ["👥 O'quvchilar", "📊 Statistika"],
+            ["📢 Xabar yuborish", "🗑 Vazifa o'chirish"],
+            ["⚙️ Admin panel", "ℹ️ Yordam"]
         ]
     else:
         keyboard = [
@@ -196,11 +197,13 @@ async def add_task_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⛔ Vazifa faqat admin tomonidan beriladi!")
         return ConversationHandler.END
 
-    # Fan tanlash klaviaturasi
     keyboard = [[s] for s in SUBJECTS]
     keyboard.append(["❌ Bekor qilish"])
     await update.message.reply_text(
-        "📚 *Qaysi fandan vazifa?*\n\nFanni tanlang:",
+        "━━━━━━━━━━━━━━━━━━━━━━\n"
+        "📚 *YANGI VAZIFA BERISH*\n"
+        "━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        "Fanni tanlang 👇",
         parse_mode="Markdown",
         reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     )
@@ -458,7 +461,83 @@ async def admin_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-async def myid(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update.effective_user.id):
+        await update.message.reply_text("⛔ Ruxsat yo'q!")
+        return
+
+    users = load_users()
+    reminders = load_reminders()
+    tasks = reminders.get("tasks", [])
+
+    today = datetime.now().strftime("%d.%m.%Y")
+    today_tasks = [t for t in tasks if t.get("created", "").startswith(today[:2])]
+
+    text = (
+        "╔══════════════════════╗\n"
+        "║   🏫 ADMIN PANEL     ║\n"
+        "║   Stanford School    ║\n"
+        "╚══════════════════════╝\n\n"
+        f"👥 Jami o'quvchilar: *{len(users)}* ta\n"
+        f"📚 Jami vazifalar: *{len(tasks)}* ta\n"
+        f"📅 Sana: *{today}*\n\n"
+        "━━━━━━━━━━━━━━━━━━━━━━\n"
+        "📌 *Buyruqlar:*\n\n"
+        "📚 *Vazifa berish* — yangi vazifa\n"
+        "📋 *Vazifalar* — barcha vazifalar\n"
+        "👥 *O'quvchilar* — ro'yxat\n"
+        "📊 *Statistika* — batafsil ma'lumot\n"
+        "📢 *Xabar yuborish* — broadcast\n"
+        "🗑 *Vazifa o'chirish* — o'chirish\n"
+        "━━━━━━━━━━━━━━━━━━━━━━"
+    )
+    await update.message.reply_text(text, parse_mode="Markdown")
+
+
+async def admin_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update.effective_user.id):
+        await update.message.reply_text("⛔ Ruxsat yo'q!")
+        return
+
+    users = load_users()
+    reminders = load_reminders()
+    tasks = reminders.get("tasks", [])
+
+    # Sinflar bo'yicha hisoblash
+    class_count = {}
+    for u in users.values():
+        c = u.get("class", "Noma'lum")
+        class_count[c] = class_count.get(c, 0) + 1
+
+    # Fanlar bo'yicha vazifalar
+    subject_count = {}
+    for t in tasks:
+        s = t.get("subject", "Noma'lum")
+        subject_count[s] = subject_count.get(s, 0) + 1
+
+    text = (
+        "📊 *STATISTIKA*\n"
+        "━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"👥 *O'quvchilar:* {len(users)} ta\n"
+        f"📚 *Jami vazifalar:* {len(tasks)} ta\n\n"
+    )
+
+    if class_count:
+        text += "🏫 *Sinflar bo'yicha:*\n"
+        for cls, cnt in sorted(class_count.items()):
+            text += f"  • {cls}: {cnt} ta o'quvchi\n"
+        text += "\n"
+
+    if subject_count:
+        text += "📖 *Fanlar bo'yicha vazifalar:*\n"
+        for subj, cnt in sorted(subject_count.items(), key=lambda x: -x[1]):
+            text += f"  • {subj}: {cnt} ta\n"
+
+    text += "\n━━━━━━━━━━━━━━━━━━━━━━"
+    await update.message.reply_text(text, parse_mode="Markdown")
+
+
+
     user = update.effective_user
     users = load_users()
     info = users.get(str(user.id), {})
@@ -509,7 +588,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("✅ Vazifa o'chirildi!")
         return
 
-    if text in ["➕ Vazifa berish"]:
+    if text in ["📚 Vazifa berish"]:
         await add_task_start(update, context)
     elif text in ["📋 Vazifalar", "📋 Vazifalarim"]:
         await list_tasks(update, context)
@@ -517,6 +596,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await delete_task_start(update, context)
     elif text == "👥 O'quvchilar":
         await admin_users(update, context)
+    elif text == "📊 Statistika":
+        await admin_stats(update, context)
+    elif text == "⚙️ Admin panel":
+        await admin_panel(update, context)
     elif text == "📢 Xabar yuborish":
         await update.message.reply_text(
             "📢 Foydalanish: `/broadcast matn`",
@@ -554,7 +637,7 @@ def main():
     # Vazifa berish
     task_handler = ConversationHandler(
         entry_points=[
-            MessageHandler(filters.Regex("^➕ Vazifa berish$"), add_task_start),
+            MessageHandler(filters.Regex("^📚 Vazifa berish$"), add_task_start),
             CommandHandler("add", add_task_start)
         ],
         states={
@@ -572,6 +655,8 @@ def main():
     app.add_handler(CommandHandler("list", list_tasks))
     app.add_handler(CommandHandler("myid", myid))
     app.add_handler(CommandHandler("users", admin_users))
+    app.add_handler(CommandHandler("stats", admin_stats))
+    app.add_handler(CommandHandler("panel", admin_panel))
     app.add_handler(CommandHandler("broadcast", admin_broadcast))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
