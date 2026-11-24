@@ -109,9 +109,21 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
 
     await update.message.reply_text(
-        "🏫 *Stanford School* maktabining\n"
-        "vazifa eslatuvchi botiga xush kelibsiz!\n\n"
-        "Davom etish uchun ro'yxatdan o'ting.\n\n"
+        "🏫 *Stanford School*\n"
+        "━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        "📌 *Bu bot nima qiladi?*\n\n"
+        "✅ Maktab o'qituvchilari tomonidan\n"
+        "   berilgan uy vazifalarini ko'rasiz\n\n"
+        "✅ Har bir fan bo'yicha vazifalar\n"
+        "   va topshirish muddati ko'rsatiladi\n\n"
+        "✅ Yangi vazifa berilganda\n"
+        "   darhol xabardor bo'lasiz\n\n"
+        "✅ O'z sinfingiz vazifalarini\n"
+        "   istalgan vaqt ko'rishingiz mumkin\n\n"
+        "━━━━━━━━━━━━━━━━━━━━━━\n"
+        "👨‍💻 *Created by:* Meleboyev Tohirbek | 7-B\n"
+        "━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        "Davom etish uchun ro'yxatdan o'ting 👇\n\n"
         "👤 *Ismingizni* kiriting:",
         parse_mode="Markdown",
         reply_markup=ReplyKeyboardRemove()
@@ -466,30 +478,35 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⛔ Ruxsat yo'q!")
         return
 
+    user = update.effective_user
     users = load_users()
     reminders = load_reminders()
     tasks = reminders.get("tasks", [])
-
     today = datetime.now().strftime("%d.%m.%Y")
-    today_tasks = [t for t in tasks if t.get("created", "").startswith(today[:2])]
+
+    admin_info = users.get(str(user.id), {})
+    admin_name = admin_info.get("name", user.first_name) if admin_info else user.first_name
 
     text = (
+        f"👋 Salom, *{admin_name}*!\n"
+        f"⚙️ Admin panelga xush kelibsiz!\n\n"
         "╔══════════════════════╗\n"
-        "║   🏫 ADMIN PANEL     ║\n"
+        "║   🏫  ADMIN PANEL    ║\n"
         "║   Stanford School    ║\n"
         "╚══════════════════════╝\n\n"
         f"👥 Jami o'quvchilar: *{len(users)}* ta\n"
         f"📚 Jami vazifalar: *{len(tasks)}* ta\n"
-        f"📅 Sana: *{today}*\n\n"
+        f"📅 Bugungi sana: *{today}*\n\n"
         "━━━━━━━━━━━━━━━━━━━━━━\n"
-        "📌 *Buyruqlar:*\n\n"
-        "📚 *Vazifa berish* — yangi vazifa\n"
-        "📋 *Vazifalar* — barcha vazifalar\n"
-        "👥 *O'quvchilar* — ro'yxat\n"
+        "📌 *Mavjud buyruqlar:*\n\n"
+        "📚 *Vazifa berish* — yangi vazifa qo'shish\n"
+        "📋 *Vazifalar* — barcha vazifalarni ko'rish\n"
+        "👥 *O'quvchilar* — ro'yxatdagi o'quvchilar\n"
         "📊 *Statistika* — batafsil ma'lumot\n"
-        "📢 *Xabar yuborish* — broadcast\n"
-        "🗑 *Vazifa o'chirish* — o'chirish\n"
-        "━━━━━━━━━━━━━━━━━━━━━━"
+        "📢 *Xabar yuborish* — hammaga xabar\n"
+        "🗑 *Vazifa o'chirish* — vazifani o'chirish\n"
+        "━━━━━━━━━━━━━━━━━━━━━━\n"
+        "👨‍💻 *Created by:* Meleboyev Tohirbek | 7-B"
     )
     await update.message.reply_text(text, parse_mode="Markdown")
 
