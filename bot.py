@@ -32,6 +32,9 @@ REG_NAME, REG_SURNAME, REG_CLASS, REG_AGE = range(4)
 # Vazifa qo'shish holatlari
 TASK_SUBJECT, TASK_CLASS, TASK_DESC, TASK_DEADLINE = range(4, 8)
 
+# O'quvchi vazifa ko'rish holati
+VIEW_SUBJECT = 8
+
 SUBJECTS = [
     "📐 Matematika", "📖 Ona tili", "🌍 Ingliz tili",
     "🔬 Fizika", "⚗️ Kimyo", "🧬 Biologiya",
@@ -362,40 +365,106 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 
-# --- Vazifalarni ko'rish ---
+# --- Vazifalarni ko'rish (fan tanlash bilan) ---
 
 async def list_tasks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
+    users = load_users()
+    user = users.get(str(user_id), {})
+
+    if is_admin(user_id):
+        # Admin uchun ham fan tanlash
+        keyboard = [[s] for s in SUBJECTS]
+        keyboard.append(["📋 Barcha fanlar"])
+        keyboard.append(["🔙 Orqaga"])
+        await update.message.reply_text(
+            "📚 *Qaysi fanning vazifalarini ko'rish?*",
+            parse_mode="Markdown",
+            reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        )
+    else:
+        # O'quvchi uchun fan tanlash
+        user_class = user.get("class", "")
+        reminders = load_reminders()
+        tasks = reminders.get("tasks", [])
+        # Faqat shu sinfga tegishli fanlarni chiqar
+        my_tasks = [t for t in tasks if t["class"] == user_class or t["class"] == "🏫 Barcha sinflar"]
+        available_subjects = list({t["subject"] for t in my_tasks})
+
+        if not available_subjects:
+            await update.message.reply_text(
+                "📭 *Hozircha sizning sinfingiz uchun vazifa yo'q.*",
+                parse_mode="Markdown"
+            )
+            return ConversationHandler.END
+
+        keyboard = [[s] for s in sorted(available_subjects)]
+        keyboard.append(["📋 Barcha fanlar"])
+        keyboard.append(["🔙 Orqaga"])
+        await update.message.reply_text(
+            f"📚 *{user_class} sinfi — fan tanlang:*",
+            parse_mode="Markdown",
+            reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        )
+    return VIEW_SUBJECT
+
+
+async def view_subject_tasks(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    text = update.message.text.strip()
+
+    if text == "🔙 Orqaga":
+        await update.message.reply_text(
+            "🏠 Asosiy menyu",
+            reply_markup=get_main_keyboard(user_id)
+        )
+        return ConversationHandler.END
+
+    users = load_users()
+    user = users.get(str(user_id), {})
+    user_class = user.get("class", "") if user else ""
+
     reminders = load_reminders()
     tasks = reminders.get("tasks", [])
 
+    # Sinfga qarab filtrlash
     if is_admin(user_id):
-        # Admin barcha vazifalarni ko'radi
-        my_tasks = tasks
-        title = "📋 *Barcha vazifalar:*"
+        class_tasks = tasks
     else:
-        # O'quvchi faqat o'z sinfi vazifalarini ko'radi
-        users = load_users()
-        user = users.get(str(user_id), {})
-        user_class = user.get("class", "")
-        my_tasks = [t for t in tasks if t["class"] == user_class or t["class"] == "🏫 Barcha sinflar"]
-        title = f"📋 *{user_class} sinfi vazifalari:*"
+        class_tasks = [t for t in tasks if t["class"] == user_class or t["class"] == "🏫 Barcha sinflar"]
 
-    if not my_tasks:
-        await update.message.reply_text("📭 Hozircha vazifalar yo'q.")
-        return
+    # Fanga qarab filtrlash
+    if text == "📋 Barcha fanlar":
+        filtered = class_tasks
+        title = "📋 *Barcha fanlar vazifalari:*"
+    else:
+        filtered = [t for t in class_tasks if t["subject"] == text]
+        title = f"📚 *{text} — vazifalar:*"
 
-    text = title + "\n\n"
-    for task in my_tasks:
-        text += (
-            f"📚 *{task['subject']}*\n"
+    if not filtered:
+        await update.message.reply_text(
+            f"📭 *{text}* dan hozircha vazifa yo'q.",
+            parse_mode="Markdown",
+            reply_markup=get_main_keyboard(user_id)
+        )
+        return ConversationHandler.END
+
+    result = title + "\n━━━━━━━━━━━━━━━━━━━━━━\n\n"
+    for i, task in enumerate(filtered, 1):
+        result += (
+            f"*{i}.* {task['subject']}\n"
             f"🏫 Sinf: {task['class']}\n"
             f"📝 {task['desc']}\n"
-            f"📅 Muddat: {task['deadline']}\n"
-            f"{'─' * 20}\n"
+            f"📅 Muddat: *{task['deadline']}*\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━\n"
         )
 
-    await update.message.reply_text(text, parse_mode="Markdown")
+    await update.message.reply_text(
+        result,
+        parse_mode="Markdown",
+        reply_markup=get_main_keyboard(user_id)
+    )
+    return ConversationHandler.END
 
 
 # --- Vazifa o'chirish ---
@@ -621,8 +690,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if text in ["📚 Vazifa berish"]:
         await add_task_start(update, context)
-    elif text in ["📋 Vazifalar", "📋 Vazifalarim"]:
-        await list_tasks(update, context)
     elif text == "🗑 Vazifa o'chirish":
         await delete_task_start(update, context)
     elif text == "👥 O'quvchilar":
@@ -680,10 +747,22 @@ def main():
         fallbacks=[CommandHandler("cancel", cancel)]
     )
 
+    # Vazifalarni ko'rish (fan tanlash)
+    view_handler = ConversationHandler(
+        entry_points=[
+            MessageHandler(filters.Regex("^📋 Vazifalarim$|^📋 Vazifalar$"), list_tasks),
+            CommandHandler("list", list_tasks)
+        ],
+        states={
+            VIEW_SUBJECT: [MessageHandler(filters.TEXT & ~filters.COMMAND, view_subject_tasks)],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)]
+    )
+
     app.add_handler(reg_handler)
     app.add_handler(task_handler)
+    app.add_handler(view_handler)
     app.add_handler(CommandHandler("help", help_command))
-    app.add_handler(CommandHandler("list", list_tasks))
     app.add_handler(CommandHandler("myid", myid))
     app.add_handler(CommandHandler("users", admin_users))
     app.add_handler(CommandHandler("stats", admin_stats))
