@@ -8,7 +8,7 @@ from telegram.ext import (
     ContextTypes, filters, ConversationHandler
 )
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from config import BOT_TOKEN
+from config import BOT_TOKEN, ADMIN_IDS
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -36,6 +36,10 @@ def save_reminders(data):
 
 # --- Buyruqlar ---
 
+def is_admin(user_id: int) -> bool:
+    return user_id in ADMIN_IDS
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         ["➕ Vazifa qo'shish", "📋 Vazifalarim"],
@@ -49,7 +53,70 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def myid(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Foydalanuvchi o'z ID sini bilishi uchun"""
+    user = update.effective_user
+    await update.message.reply_text(
+        f"👤 *Sizning ma'lumotlaringiz:*\n\n"
+        f"🆔 ID: `{user.id}`\n"
+        f"👤 Ism: {user.first_name}\n"
+        f"📛 Username: @{user.username or 'yo\'q'}",
+        parse_mode="Markdown"
+    )
+
+
+async def admin_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Admin: barcha foydalanuvchilarni ko'rish"""
+    if not is_admin(update.effective_user.id):
+        await update.message.reply_text("⛔ Sizda admin huquqi yo'q!")
+        return
+
+    reminders = load_reminders()
+    if not reminders:
+        await update.message.reply_text("📭 Hech qanday foydalanuvchi yo'q.")
+        return
+
+    text = "👥 *Barcha foydalanuvchilar:*\n\n"
+    for user_id, tasks in reminders.items():
+        text += f"🆔 `{user_id}` — {len(tasks)} ta vazifa\n"
+
+    await update.message.reply_text(text, parse_mode="Markdown")
+
+
+async def admin_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Admin: hammaga xabar yuborish — /broadcast matn"""
+    if not is_admin(update.effective_user.id):
+        await update.message.reply_text("⛔ Sizda admin huquqi yo'q!")
+        return
+
+    if not context.args:
+        await update.message.reply_text(
+            "📢 Foydalanish: `/broadcast Salom barchaga!`",
+            parse_mode="Markdown"
+        )
+        return
+
+    message = " ".join(context.args)
+    reminders = load_reminders()
+    success, failed = 0, 0
+
+    for user_id in reminders:
+        try:
+            await context.bot.send_message(
+                chat_id=int(user_id),
+                text=f"📢 *Admin xabari:*\n\n{message}",
+                parse_mode="Markdown"
+            )
+            success += 1
+        except Exception:
+            failed += 1
+
+    await update.message.reply_text(
+        f"✅ Yuborildi: {success} ta\n❌ Yuborilmadi: {failed} ta"
+    )
+
+
+
     await update.message.reply_text(
         "📌 *Buyruqlar:*\n\n"
         "➕ *Vazifa qo'shish* — yangi eslatma qo'shish\n"
@@ -289,6 +356,9 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("list", list_tasks))
+    app.add_handler(CommandHandler("myid", myid))
+    app.add_handler(CommandHandler("users", admin_users))
+    app.add_handler(CommandHandler("broadcast", admin_broadcast))
     app.add_handler(conv_handler)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
