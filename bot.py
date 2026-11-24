@@ -473,6 +473,20 @@ async def admin_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+async def myid(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    users = load_users()
+    info = users.get(str(user.id), {})
+    text = f"🆔 ID: `{user.id}`\n"
+    if info:
+        text += (
+            f"👤 {info['name']} {info['surname']}\n"
+            f"🏫 Sinf: {info['class']}\n"
+            f"🎂 Yosh: {info['age']}\n"
+        )
+    await update.message.reply_text(text, parse_mode="Markdown")
+
+
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user.id):
         await update.message.reply_text("⛔ Ruxsat yo'q!")
