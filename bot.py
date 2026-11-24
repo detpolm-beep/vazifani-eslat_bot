@@ -17,10 +17,10 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 DATA_FILE = "reminders.json"
-
-# ConversationHandler holatlari
 TASK_TEXT, TASK_TIME = range(2)
 
+
+# --- Ma'lumotlar ---
 
 def load_reminders():
     if os.path.exists(DATA_FILE):
@@ -34,11 +34,11 @@ def save_reminders(data):
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 
-# --- Buyruqlar ---
-
 def is_admin(user_id: int) -> bool:
     return user_id in ADMIN_IDS
 
+
+# --- Asosiy buyruqlar ---
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
@@ -53,20 +53,32 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "📌 *Buyruqlar:*\n\n"
+        "➕ *Vazifa qo'shish* — yangi eslatma qo'shish\n"
+        "📋 *Vazifalarim* — barcha vazifalarni ko'rish\n"
+        "🗑 *Vazifa o'chirish* — vazifani o'chirish\n\n"
+        "⏰ Vaqt formati: `HH:MM` (masalan `09:30`)\n"
+        "📅 Kun formati: `kunlik` yoki `DD.MM.YYYY`",
+        parse_mode="Markdown"
+    )
+
+
 async def myid(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Foydalanuvchi o'z ID sini bilishi uchun"""
     user = update.effective_user
     await update.message.reply_text(
         f"👤 *Sizning ma'lumotlaringiz:*\n\n"
         f"🆔 ID: `{user.id}`\n"
         f"👤 Ism: {user.first_name}\n"
-        f"📛 Username: @{user.username or 'yo\'q'}",
+        f"📛 Username: @{user.username or 'yoq'}",
         parse_mode="Markdown"
     )
 
 
+# --- Admin buyruqlar ---
+
 async def admin_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Admin: barcha foydalanuvchilarni ko'rish"""
     if not is_admin(update.effective_user.id):
         await update.message.reply_text("⛔ Sizda admin huquqi yo'q!")
         return
@@ -84,7 +96,6 @@ async def admin_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def admin_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Admin: hammaga xabar yuborish — /broadcast matn"""
     if not is_admin(update.effective_user.id):
         await update.message.reply_text("⛔ Sizda admin huquqi yo'q!")
         return
@@ -113,18 +124,6 @@ async def admin_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(
         f"✅ Yuborildi: {success} ta\n❌ Yuborilmadi: {failed} ta"
-    )
-
-
-
-    await update.message.reply_text(
-        "📌 *Buyruqlar:*\n\n"
-        "➕ *Vazifa qo'shish* — yangi eslatma qo'shish\n"
-        "📋 *Vazifalarim* — barcha vazifalarni ko'rish\n"
-        "🗑 *Vazifa o'chirish* — vazifani o'chirish\n\n"
-        "⏰ Vaqt formati: `HH:MM` (masalan `09:30`)\n"
-        "📅 Kun formati: `kunlik` yoki `DD.MM.YYYY`",
-        parse_mode="Markdown"
     )
 
 
@@ -196,7 +195,6 @@ async def add_task_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reminders[user_id].append(task)
     save_reminders(reminders)
 
-    # Schedulerga qo'shish
     scheduler = context.application.scheduler
     schedule_reminder(scheduler, context.application, user_id, task)
 
@@ -252,6 +250,8 @@ async def delete_task_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["deleting"] = True
 
 
+# --- Xabarlar ---
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
 
@@ -265,7 +265,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if len(new_tasks) == len(tasks):
             await update.message.reply_text("❌ Bunday raqamli vazifa topilmadi.")
         else:
-            # ID larni qayta raqamlash
             for i, t in enumerate(new_tasks, 1):
                 t["id"] = str(i)
             reminders[user_id] = new_tasks
@@ -273,7 +272,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("✅ Vazifa o'chirildi!")
         return
 
-    # Tugmalar
     if text == "➕ Vazifa qo'shish":
         await add_task_start(update, context)
     elif text == "📋 Vazifalarim":
@@ -323,7 +321,6 @@ def schedule_reminder(scheduler, app, user_id, task):
 
 
 async def on_startup(app):
-    """Bot ishga tushganda mavjud vazifalarni schedulerga yuklash"""
     reminders = load_reminders()
     for user_id, tasks in reminders.items():
         for task in tasks:
@@ -336,11 +333,9 @@ async def on_startup(app):
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
 
-    # Scheduler ulash
     scheduler = AsyncIOScheduler()
     app.scheduler = scheduler
 
-    # ConversationHandler
     conv_handler = ConversationHandler(
         entry_points=[
             MessageHandler(filters.Regex("^➕ Vazifa qo'shish$"), add_task_start),
