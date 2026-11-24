@@ -49,10 +49,16 @@ def is_admin(user_id: int) -> bool:
 # --- Asosiy buyruqlar ---
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [
-        ["➕ Vazifa qo'shish", "📋 Vazifalarim"],
-        ["🗑 Vazifa o'chirish", "ℹ️ Yordam"]
-    ]
+    user_id = update.effective_user.id
+    if is_admin(user_id):
+        keyboard = [
+            ["➕ Vazifa qo'shish", "📋 Vazifalarim"],
+            ["🗑 Vazifa o'chirish", "ℹ️ Yordam"]
+        ]
+    else:
+        keyboard = [
+            ["📋 Vazifalarim", "ℹ️ Yordam"]
+        ]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     await update.message.reply_text(
         "👋 Salom! Men vazifa eslatuvchi botman.\n\n"
@@ -138,6 +144,9 @@ async def admin_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # --- Vazifa qo'shish (ConversationHandler) ---
 
 async def add_task_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update.effective_user.id):
+        await update.message.reply_text("⛔ Vazifa faqat admin tomonidan qo'shiladi!")
+        return ConversationHandler.END
     await update.message.reply_text(
         "📝 Vazifa matnini yozing:\n\n"
         "(Bekor qilish uchun /cancel)"
@@ -242,6 +251,9 @@ async def list_tasks(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # --- Vazifa o'chirish ---
 
 async def delete_task_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update.effective_user.id):
+        await update.message.reply_text("⛔ Vazifa faqat admin tomonidan o'chiriladi!")
+        return
     user_id = str(update.effective_user.id)
     reminders = load_reminders()
     tasks = reminders.get(user_id, [])
